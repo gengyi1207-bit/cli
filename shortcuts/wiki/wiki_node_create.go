@@ -118,6 +118,7 @@ type wikiNodeRecord struct {
 	OriginNodeToken string
 	Title           string
 	HasChild        bool
+	URL             string
 }
 
 // wikiSpaceRecord contains the response fields used when resolving spaces.
@@ -456,6 +457,7 @@ func parseWikiNodeRecord(node map[string]interface{}) (*wikiNodeRecord, error) {
 		OriginNodeToken: common.GetString(node, "origin_node_token"),
 		Title:           common.GetString(node, "title"),
 		HasChild:        common.GetBool(node, "has_child"),
+		URL:             common.GetString(node, "url"),
 	}, nil
 }
 
@@ -498,7 +500,7 @@ func augmentWikiNodeCreateOutput(runtime *common.RuntimeContext, execution *wiki
 	if grant := common.AutoGrantCurrentUserDrivePermission(runtime, execution.Node.NodeToken, "wiki"); grant != nil {
 		out["permission_grant"] = grant
 	}
-	if u := common.BuildResourceURL(runtime.Config.Brand, "wiki", execution.Node.NodeToken); u != "" {
+	if u := wikiNodeURL(runtime.Config.Brand, execution.Node); u != "" {
 		out["url"] = u
 	}
 	return out
