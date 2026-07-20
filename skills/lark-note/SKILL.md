@@ -92,3 +92,28 @@ lark-cli note +detail --note-id <note_id>
 # 3. 读取纪要文档内容
 lark-cli docs +fetch --doc <note_doc_token> --doc-format markdown
 ```
+
+### 2. 已知 note_id 直接查询纪要详情
+
+已经持有 `note_id`（用户直接给出，或从 `docs +fetch` 的 `<vc-transcribe-tab vc-node-id="...">` 取得）时，跳过 vc / minutes / calendar 定位步骤，直接 `note +detail`：
+
+```bash
+lark-cli note +detail --note-id <note_id>
+```
+
+返回 `note` 对象（`shared_doc_tokens` 为空时省略该字段）：
+
+```json
+{
+  "note": {
+    "note_id": "7412345678901234567",
+    "note_display_type": "normal",
+    "creator_id": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "create_time": "2026-07-18 15:04",
+    "note_doc_token": "Xy1zAbCdEfGhIjKlMnOpQrStUv",
+    "verbatim_doc_token": "Pq2rStUvWxYzAbCdEfGhIjKlMn"
+  }
+}
+```
+
+拿到结果后按 `note_display_type` 路由（见上方「`note_display_type` 路由」表）：`normal` 用 `docs +fetch --doc <verbatim_doc_token>` 读逐字稿，`unified` 转 `note +transcript --note-id <note_id>`。
