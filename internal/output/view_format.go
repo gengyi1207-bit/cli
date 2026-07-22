@@ -39,7 +39,7 @@ func ParseViewFormat(raw string) (ViewFormat, error) {
 		return ViewFormatYAML, nil
 	default:
 		return "", errs.NewValidationError(errs.SubtypeInvalidArgument,
-			"invalid --output value %q, valid values: text | json | yaml", raw)
+			"invalid --output value %q, valid values: text | json | yaml", raw).WithParam("output")
 	}
 }
 
@@ -55,15 +55,27 @@ func WriteView(w io.Writer, format ViewFormat, data interface{}, renderText func
 	case ViewFormatJSON:
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(data)
+		return wrapWriteViewErr(enc.Encode(data), "failed to render json: %v")
 	case ViewFormatYAML:
 		out, err := yaml.Marshal(data)
 		if err != nil {
 			return errs.NewInternalError(errs.SubtypeUnknown, "failed to render yaml: %v", err).WithCause(err)
 		}
 		_, err = w.Write(out)
-		return err
+		return wrapWriteViewErr(err, "failed to write yaml output: %v")
 	default:
-		return renderText(w)
+		return wrapWriteViewErr(renderText(w), "failed to render text: %v")
 	}
+}
+
+// wrapWriteViewErr preserves already-typed errs errors (e.g. from a caller's
+// renderText closure) and wraps everything else as an internal error.
+func wrapWriteViewErr(err error, format string) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := errs.ProblemOf(err); ok {
+		return err
+	}
+	return errs.NewInternalError(errs.SubtypeUnknown, format, err).WithCause(err)
 }

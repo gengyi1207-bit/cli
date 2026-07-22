@@ -46,6 +46,9 @@ func TestParseViewFormat_Invalid(t *testing.T) {
 	if valErr.Subtype != errs.SubtypeInvalidArgument {
 		t.Errorf("Subtype = %q, want %q", valErr.Subtype, errs.SubtypeInvalidArgument)
 	}
+	if valErr.Param != "output" {
+		t.Errorf("Param = %q, want %q", valErr.Param, "output")
+	}
 }
 
 type testView struct {
