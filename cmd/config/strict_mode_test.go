@@ -5,7 +5,6 @@ package config
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/larksuite/cli/errs"
@@ -37,8 +36,9 @@ func TestStrictMode_Show_Default(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "off") {
-		t.Errorf("expected 'off' in output, got: %s", stdout.String())
+	want := "strict-mode: off (source: global (default))\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
