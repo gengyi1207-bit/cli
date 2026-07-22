@@ -4,9 +4,11 @@
 package config
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/larksuite/cli/errs"
 	"github.com/larksuite/cli/internal/cmdutil"
 	"github.com/larksuite/cli/internal/core"
 )
@@ -160,5 +162,66 @@ func TestStrictMode_InvalidValue(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Error("expected error for invalid value 'on'")
+	}
+}
+
+func TestStrictMode_Show_JSON(t *testing.T) {
+	setupStrictModeTestConfig(t)
+	f, stdout, _, _ := cmdutil.TestFactory(t, &core.CliConfig{AppID: "test-app", AppSecret: "secret"})
+	cmd := NewCmdConfigStrictMode(f)
+	cmd.SetArgs([]string{"--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"strict_mode\": \"off\",\n  \"source\": \"global (default)\"\n}\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestStrictMode_Show_YAML(t *testing.T) {
+	setupStrictModeTestConfig(t)
+	f, stdout, _, _ := cmdutil.TestFactory(t, &core.CliConfig{AppID: "test-app", AppSecret: "secret"})
+	cmd := NewCmdConfigStrictMode(f)
+	cmd.SetArgs([]string{"--output", "yaml"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	// "off" collides with a YAML 1.1 boolean literal; yaml.v3 quotes it.
+	want := "strict_mode: \"off\"\nsource: global (default)\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestStrictMode_Show_CredentialProviderSource(t *testing.T) {
+	setupStrictModeTestConfig(t)
+	// SupportedIdentities: 2 makes the runtime credential chain resolve to
+	// "bot", diverging from the persisted profile's default "off" — this
+	// exercises the runtime != configMode branch in showStrictMode.
+	f, stdout, _, _ := cmdutil.TestFactory(t, &core.CliConfig{AppID: "test-app", AppSecret: "secret", SupportedIdentities: 2})
+	cmd := NewCmdConfigStrictMode(f)
+	cmd.SetArgs([]string{"--output", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"strict_mode\": \"bot\",\n  \"source\": \"credential provider\"\n}\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestStrictMode_Show_InvalidOutput(t *testing.T) {
+	setupStrictModeTestConfig(t)
+	f, _, _, _ := cmdutil.TestFactory(t, &core.CliConfig{AppID: "test-app", AppSecret: "secret"})
+	cmd := NewCmdConfigStrictMode(f)
+	cmd.SetArgs([]string{"--output", "xml"})
+	err := cmd.Execute()
+	var valErr *errs.ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *errs.ValidationError, got %T: %v", err, err)
+	}
+	if valErr.Subtype != errs.SubtypeInvalidArgument {
+		t.Errorf("Subtype = %q, want %q", valErr.Subtype, errs.SubtypeInvalidArgument)
 	}
 }

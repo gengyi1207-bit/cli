@@ -6,17 +6,25 @@ package config
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/larksuite/cli/errs"
 	"github.com/larksuite/cli/internal/cmdutil"
 	"github.com/larksuite/cli/internal/core"
+	"github.com/larksuite/cli/internal/output"
 	"github.com/spf13/cobra"
 )
+
+type strictModeView struct {
+	StrictMode string `json:"strict_mode" yaml:"strict_mode"`
+	Source     string `json:"source" yaml:"source"`
+}
 
 // NewCmdConfigStrictMode creates the "config strict-mode" subcommand.
 func NewCmdConfigStrictMode(f *cmdutil.Factory) *cobra.Command {
 	var global bool
 	var reset bool
+	var outputFlag string
 
 	cmd := &cobra.Command{
 		Use:   "strict-mode [bot|user|off]",
@@ -54,7 +62,7 @@ explicit user confirmation — never run on your own initiative.`,
 				if app == nil {
 					return core.NoActiveProfileError()
 				}
-				return showStrictMode(cmd.Context(), f, multi, app)
+				return showStrictMode(cmd.Context(), f, multi, app, outputFlag)
 			}
 			app := multi.CurrentAppConfig(f.Invocation.Profile)
 			if !global && app == nil {
@@ -66,6 +74,7 @@ explicit user confirmation — never run on your own initiative.`,
 
 	cmd.Flags().BoolVar(&global, "global", false, "set at global level (applies to all profiles)")
 	cmd.Flags().BoolVar(&reset, "reset", false, "reset profile setting to inherit global")
+	cmd.Flags().StringVar(&outputFlag, "output", "text", "output format: text | json | yaml")
 	cmdutil.SetRisk(cmd, "write")
 
 	return cmd
@@ -86,17 +95,27 @@ func resetStrictMode(f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.A
 	return nil
 }
 
-func showStrictMode(ctx context.Context, f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.AppConfig) error {
+func showStrictMode(ctx context.Context, f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.AppConfig, outputFlag string) error {
+	format, err := output.ParseViewFormat(outputFlag)
+	if err != nil {
+		return err
+	}
+
 	// Runtime effective mode from credential provider chain is the source of truth.
 	runtime := f.ResolveStrictMode(ctx)
 	configMode, configSource := resolveStrictModeStatus(multi, app)
 
+	mode, source := configMode, configSource
 	if runtime != configMode {
-		fmt.Fprintf(f.IOStreams.Out, "strict-mode: %s (source: credential provider)\n", runtime)
-		return nil
+		mode, source = runtime, "credential provider"
 	}
-	fmt.Fprintf(f.IOStreams.Out, "strict-mode: %s (source: %s)\n", configMode, configSource)
-	return nil
+
+	return output.WriteView(f.IOStreams.Out, format,
+		strictModeView{StrictMode: string(mode), Source: source},
+		func(w io.Writer) error {
+			_, err := fmt.Fprintf(w, "strict-mode: %s (source: %s)\n", mode, source)
+			return err
+		})
 }
 
 func setStrictMode(f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.AppConfig, value string, global bool) error {
