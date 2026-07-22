@@ -227,4 +227,7 @@ func TestStrictMode_Show_InvalidOutput(t *testing.T) {
 	if valErr.Param != "output" {
 		t.Errorf("Param = %q, want %q", valErr.Param, "output")
 	}
+	if p, ok := errs.ProblemOf(err); !ok || p.Category != errs.CategoryValidation || p.Subtype != errs.SubtypeInvalidArgument {
+		t.Errorf("ProblemOf = %+v (ok=%v), want Category=%q Subtype=%q", p, ok, errs.CategoryValidation, errs.SubtypeInvalidArgument)
+	}
 }
