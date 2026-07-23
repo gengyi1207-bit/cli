@@ -117,3 +117,43 @@ func TestRenderView_Text(t *testing.T) {
 		t.Errorf("got %q", buf.String())
 	}
 }
+
+// testUnmarshalable is a struct with a func field, which yaml.v3 cannot marshal.
+type testUnmarshalable struct {
+	Name string
+	Fn   func()
+}
+
+func TestWriteYAML_UnmarshalableValue(t *testing.T) {
+	var buf bytes.Buffer
+	data := testUnmarshalable{Name: "test", Fn: func() {}}
+
+	err := WriteYAML(&buf, data)
+
+	if err == nil {
+		t.Fatalf("WriteYAML with unmarshalalble value should return an error, got nil")
+	}
+
+	if !isOutputMarshalError(err) {
+		t.Fatalf("error should be outputMarshalError, got: %T", err)
+	}
+
+	if errMsg := err.Error(); len(errMsg) == 0 {
+		t.Fatalf("error message should not be empty")
+	}
+}
+
+func TestRenderView_YAML_UnmarshalableValue(t *testing.T) {
+	// This test verifies that RenderView does not panic when given an
+	// unmarshalalble value with ViewFormatYAML. The test passes if it
+	// completes without panicking.
+	var buf bytes.Buffer
+	data := testUnmarshalable{Name: "test", Fn: func() {}}
+
+	// RenderView has no return value, so if it panics, the test will fail.
+	// If it returns normally, the test passes (marshal error is logged to stderr).
+	RenderView(&buf, ViewFormatYAML, data, func(io.Writer) error {
+		t.Fatal("textFn must not be called for ViewFormatYAML")
+		return nil
+	})
+}

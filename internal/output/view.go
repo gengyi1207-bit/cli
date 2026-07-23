@@ -5,6 +5,7 @@ package output
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 
@@ -71,17 +72,23 @@ func RenderView(w io.Writer, format ViewFormat, data interface{}, textFn func(io
 }
 
 // WriteYAML writes data as YAML to w and returns marshal or write errors.
-func WriteYAML(w io.Writer, data interface{}) error {
+func WriteYAML(w io.Writer, data interface{}) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = &outputMarshalError{err: fmt.Errorf("yaml marshal panic: %v", r)}
+		}
+	}()
+
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
-	if err := enc.Encode(data); err != nil {
+	if encErr := enc.Encode(data); encErr != nil {
 		_ = enc.Close()
-		return &outputMarshalError{err: err}
+		return &outputMarshalError{err: encErr}
 	}
-	if err := enc.Close(); err != nil {
-		return &outputMarshalError{err: err}
+	if closeErr := enc.Close(); closeErr != nil {
+		return &outputMarshalError{err: closeErr}
 	}
-	_, err := w.Write(buf.Bytes())
-	return err
+	_, writeErr := w.Write(buf.Bytes())
+	return writeErr
 }
