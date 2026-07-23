@@ -6,10 +6,12 @@ package config
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/larksuite/cli/errs"
 	"github.com/larksuite/cli/internal/cmdutil"
 	"github.com/larksuite/cli/internal/core"
+	"github.com/larksuite/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +19,7 @@ import (
 func NewCmdConfigStrictMode(f *cmdutil.Factory) *cobra.Command {
 	var global bool
 	var reset bool
+	var outputFormat string
 
 	cmd := &cobra.Command{
 		Use:   "strict-mode [bot|user|off]",
@@ -32,6 +35,7 @@ No args: show current mode. Switching does NOT require re-bind.
 For AI agents: this is a security policy. DO NOT switch without
 explicit user confirmation — never run on your own initiative.`,
 		Example: `  lark-cli config strict-mode               # show current
+  lark-cli config strict-mode --output json # show current as JSON
   lark-cli config strict-mode user          # switch (after user confirms)
   lark-cli config strict-mode bot --global  # set globally
   lark-cli config strict-mode --reset       # clear profile override`,
@@ -42,6 +46,12 @@ explicit user confirmation — never run on your own initiative.`,
 				return err
 			}
 
+			isView := !reset && len(args) == 0
+			if !isView && outputFormat != "text" {
+				return errs.NewValidationError(errs.SubtypeInvalidArgument,
+					"--output only applies when viewing (no value argument, no --reset)").WithParam("--output")
+			}
+
 			if reset {
 				app := multi.CurrentAppConfig(f.Invocation.Profile)
 				if app == nil {
@@ -50,11 +60,16 @@ explicit user confirmation — never run on your own initiative.`,
 				return resetStrictMode(f, multi, app, global, args)
 			}
 			if len(args) == 0 {
+				format, ok := output.ParseViewFormat(outputFormat)
+				if !ok {
+					return errs.NewValidationError(errs.SubtypeInvalidArgument,
+						"invalid output format %q, valid values: text | json | yaml", outputFormat).WithParam("--output")
+				}
 				app := multi.CurrentAppConfig(f.Invocation.Profile)
 				if app == nil {
 					return core.NoActiveProfileError()
 				}
-				return showStrictMode(cmd.Context(), f, multi, app)
+				return showStrictMode(cmd.Context(), f, multi, app, format)
 			}
 			app := multi.CurrentAppConfig(f.Invocation.Profile)
 			if !global && app == nil {
@@ -66,6 +81,10 @@ explicit user confirmation — never run on your own initiative.`,
 
 	cmd.Flags().BoolVar(&global, "global", false, "set at global level (applies to all profiles)")
 	cmd.Flags().BoolVar(&reset, "reset", false, "reset profile setting to inherit global")
+	cmd.Flags().StringVar(&outputFormat, "output", "text", "output format for viewing: text|json|yaml")
+	cmdutil.RegisterFlagCompletion(cmd, "output", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
+	})
 	cmdutil.SetRisk(cmd, "write")
 
 	return cmd
@@ -86,16 +105,27 @@ func resetStrictMode(f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.A
 	return nil
 }
 
-func showStrictMode(ctx context.Context, f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.AppConfig) error {
+// StrictModeView is the structured (json/yaml) representation of `config
+// strict-mode`'s view-mode output.
+type StrictModeView struct {
+	Mode   string `json:"mode" yaml:"mode"`
+	Source string `json:"source" yaml:"source"`
+}
+
+func showStrictMode(ctx context.Context, f *cmdutil.Factory, multi *core.MultiAppConfig, app *core.AppConfig, format output.ViewFormat) error {
 	// Runtime effective mode from credential provider chain is the source of truth.
 	runtime := f.ResolveStrictMode(ctx)
 	configMode, configSource := resolveStrictModeStatus(multi, app)
 
+	mode, source := configMode, configSource
 	if runtime != configMode {
-		fmt.Fprintf(f.IOStreams.Out, "strict-mode: %s (source: credential provider)\n", runtime)
-		return nil
+		mode, source = runtime, "credential provider"
 	}
-	fmt.Fprintf(f.IOStreams.Out, "strict-mode: %s (source: %s)\n", configMode, configSource)
+
+	output.RenderView(f.IOStreams.Out, format, StrictModeView{Mode: string(mode), Source: source}, func(w io.Writer) error {
+		_, err := fmt.Fprintf(w, "strict-mode: %s (source: %s)\n", mode, source)
+		return err
+	})
 	return nil
 }
 
