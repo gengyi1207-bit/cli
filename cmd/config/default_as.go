@@ -5,15 +5,25 @@ package config
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/larksuite/cli/errs"
 	"github.com/larksuite/cli/internal/cmdutil"
 	"github.com/larksuite/cli/internal/core"
+	"github.com/larksuite/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
+// DefaultAsView is the structured (json/yaml) representation of `config
+// default-as`'s view-mode output.
+type DefaultAsView struct {
+	DefaultAs string `json:"default_as" yaml:"default_as"`
+}
+
 // NewCmdConfigDefaultAs creates the "config default-as" subcommand.
 func NewCmdConfigDefaultAs(f *cmdutil.Factory) *cobra.Command {
+	var outputFormat string
+
 	cmd := &cobra.Command{
 		Use:   "default-as [user|bot|auto]",
 		Short: "View or set default identity type",
@@ -31,12 +41,25 @@ func NewCmdConfigDefaultAs(f *cmdutil.Factory) *cobra.Command {
 			}
 
 			if len(args) == 0 {
+				format, ok := output.ParseViewFormat(outputFormat)
+				if !ok {
+					return errs.NewValidationError(errs.SubtypeInvalidArgument,
+						"invalid output format %q, valid values: text | json | yaml", outputFormat).WithParam("--output")
+				}
 				current := app.DefaultAs
 				if current == "" {
 					current = "auto"
 				}
-				fmt.Fprintf(f.IOStreams.Out, "default-as: %s\n", current)
+				output.RenderView(f.IOStreams.Out, format, DefaultAsView{DefaultAs: string(current)}, func(w io.Writer) error {
+					_, err := fmt.Fprintf(w, "default-as: %s\n", current)
+					return err
+				})
 				return nil
+			}
+
+			if outputFormat != "text" {
+				return errs.NewValidationError(errs.SubtypeInvalidArgument,
+					"--output only applies when viewing (no value argument)").WithParam("--output")
 			}
 
 			value := args[0]
@@ -52,6 +75,10 @@ func NewCmdConfigDefaultAs(f *cmdutil.Factory) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&outputFormat, "output", "text", "output format for viewing: text|json|yaml")
+	cmdutil.RegisterFlagCompletion(cmd, "output", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
+	})
 	cmdutil.SetRisk(cmd, "write")
 	return cmd
 }
