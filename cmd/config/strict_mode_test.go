@@ -6,7 +6,6 @@ package config
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -40,8 +39,8 @@ func TestStrictMode_Show_Default(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "off") {
-		t.Errorf("expected 'off' in output, got: %s", stdout.String())
+	if stdout.String() != "strict-mode: off (source: global (default))\n" {
+		t.Errorf("stdout = %q, want %q", stdout.String(), "strict-mode: off (source: global (default))\n")
 	}
 }
 
